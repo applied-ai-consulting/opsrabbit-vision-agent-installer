@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEFAULT_RELEASE_REPOSITORY="applied-ai-consulting/oriental"
-DEFAULT_RELEASE_VERSION="latest"
+DEFAULT_RELEASE_VERSION="agents/opsrabbit-vision/v0.1.0"
 DEFAULT_ASSET_NAME="opsrabbit-vision-agent_0.1.0_arm64.deb"
 DEFAULT_DEVICE_ID="pi5-belt-line-1"
 DEFAULT_PLUGIN_ID="conveyor-vision"
