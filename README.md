@@ -89,8 +89,8 @@ visible in shell history and process listings.
 ```bash
 sudo bash install.sh \
   --release-repository applied-ai-consulting/oriental \
-  --release-version agents/opsrabbit-vision/v0.1.1 \
-  --asset-name opsrabbit-vision-agent_0.1.1_arm64.deb \
+  --release-version agents/opsrabbit-vision/v0.1.2 \
+  --asset-name opsrabbit-vision-agent_0.1.2_arm64.deb \
   --device-id pi5-belt-line-1 \
   --base-url https://opsrabbit.example.internal \
   --github-token-file /root/github-release-token.txt \
@@ -116,6 +116,19 @@ sudo bash install.sh \
 
 The installer automatically sets `verify_tls = false` in the generated agent
 configuration when the base URL starts with `http://`.
+
+If you are rerunning the installer after the model was already installed, skip
+the immutable model install step:
+
+```bash
+sudo bash install.sh \
+  --base-url http://192.168.1.50:8384 \
+  --github-token-file /root/github-release-token.txt \
+  --device-token-file /root/opsrabbit-vision-device-token.txt \
+  --skip-model-install \
+  --force-configure \
+  --non-interactive
+```
 
 ## Custom spool storage
 
