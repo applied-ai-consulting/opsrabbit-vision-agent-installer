@@ -9,15 +9,18 @@ DEFAULT_PLUGIN_ID="conveyor-vision"
 DEFAULT_DATA_DIR="/var/lib/opsrabbit-vision"
 DEFAULT_CONFIG_PATH="/etc/opsrabbit-vision/vision-agent.toml"
 DEFAULT_CREDENTIAL_PATH="/etc/opsrabbit-vision/device-token.json"
+DEFAULT_MODEL_RELEASE_REPOSITORY="applied-ai-consulting/oriental"
+DEFAULT_MODEL_RELEASE_VERSION="models/yolov8n/v1.0.0"
 DEFAULT_MODEL_MANIFEST_ASSET_NAME="model-manifest.json"
+DEFAULT_MODEL_HEF_ASSET_NAME="yolov8n-1.0.0.hef"
 
 release_repository="${OPSRABBIT_VISION_RELEASE_REPOSITORY:-${DEFAULT_RELEASE_REPOSITORY}}"
 release_version="${OPSRABBIT_VISION_RELEASE_VERSION:-${DEFAULT_RELEASE_VERSION}}"
 asset_name="${OPSRABBIT_VISION_ASSET_NAME:-${DEFAULT_ASSET_NAME}}"
-model_release_repository="${OPSRABBIT_VISION_MODEL_RELEASE_REPOSITORY:-}"
-model_release_version="${OPSRABBIT_VISION_MODEL_RELEASE_VERSION:-latest}"
+model_release_repository="${OPSRABBIT_VISION_MODEL_RELEASE_REPOSITORY:-${DEFAULT_MODEL_RELEASE_REPOSITORY}}"
+model_release_version="${OPSRABBIT_VISION_MODEL_RELEASE_VERSION:-${DEFAULT_MODEL_RELEASE_VERSION}}"
 model_manifest_asset_name="${OPSRABBIT_VISION_MODEL_MANIFEST_ASSET_NAME:-${DEFAULT_MODEL_MANIFEST_ASSET_NAME}}"
-model_hef_asset_name="${OPSRABBIT_VISION_MODEL_HEF_ASSET_NAME:-}"
+model_hef_asset_name="${OPSRABBIT_VISION_MODEL_HEF_ASSET_NAME:-${DEFAULT_MODEL_HEF_ASSET_NAME}}"
 device_id="${OPSRABBIT_VISION_DEVICE_ID:-}"
 base_url="${OPSRABBIT_VISION_BASE_URL:-}"
 plugin_id="${OPSRABBIT_VISION_PLUGIN_ID:-${DEFAULT_PLUGIN_ID}}"
@@ -40,14 +43,14 @@ Usage:
 
 Options:
   --release-repository OWNER/REPO     GitHub repo containing the private release asset.
-  --release-version VERSION|latest    Release tag to download. Defaults to latest.
+  --release-version VERSION|latest    Release tag to download. Defaults to agents/opsrabbit-vision/v0.1.0.
   --asset-name NAME                   Debian asset name in the release.
   --model-release-repository OWNER/REPO
                                       Optional GitHub repo containing model release assets.
   --model-release-version VERSION|latest
-                                      Model release tag to download. Defaults to latest.
+                                      Model release tag to download. Defaults to models/yolov8n/v1.0.0.
   --model-manifest-asset-name NAME    Model manifest asset name. Defaults to model-manifest.json.
-  --model-hef-asset-name NAME         Hailo HEF model asset name to install.
+  --model-hef-asset-name NAME         Hailo HEF model asset name to install. Defaults to yolov8n-1.0.0.hef.
   --install-model yes|no|prompt       Download/install model after agent configuration.
   --device-id ID                      Registered Conveyor Vision device id.
   --base-url URL                      OpsRabbit backend base URL reachable from the Pi.
@@ -266,8 +269,10 @@ install_model_assets() {
     warn "Model install skipped. Run opsrabbit-vision model-install before starting a real inspection."
     return
   fi
-  prompt_text model_release_repository "Model release repository"
-  prompt_text model_hef_asset_name "Model HEF asset name, for example belt-defects-1.0.0.hef"
+  prompt_text model_release_repository "Model release repository" "${DEFAULT_MODEL_RELEASE_REPOSITORY}"
+  prompt_text model_release_version "Model release version/tag" "${DEFAULT_MODEL_RELEASE_VERSION}"
+  prompt_text model_manifest_asset_name "Model manifest asset name" "${DEFAULT_MODEL_MANIFEST_ASSET_NAME}"
+  prompt_text model_hef_asset_name "Model HEF asset name" "${DEFAULT_MODEL_HEF_ASSET_NAME}"
   validate_inputs
 
   local model_dir manifest_path hef_path

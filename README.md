@@ -69,10 +69,15 @@ The installer prompts for:
 
 If you choose model installation, provide:
 
-- model release repository, for example `applied-ai-consulting/oriental`;
-- model release version/tag, or `latest`;
+- model release repository, default `applied-ai-consulting/oriental`;
+- model release version/tag, default `models/yolov8n/v1.0.0`;
 - model manifest asset name, default `model-manifest.json`;
-- model HEF asset name, for example `belt-defects-1.0.0.hef`.
+- model HEF asset name, default `yolov8n-1.0.0.hef`.
+
+The default model is Hailo's Hailo-8L `yolov8n` COCO smoke-test model. It is
+useful for validating installer, release, and Hailo runtime wiring, but it is
+not conveyor-defect trained. For production, use the model release tag and HEF
+asset generated from the trained Conveyor Vision model.
 
 ## Non-interactive install
 
@@ -91,9 +96,9 @@ sudo bash install.sh \
   --install-hailo yes \
   --install-model yes \
   --model-release-repository applied-ai-consulting/oriental \
-  --model-release-version agents/opsrabbit-vision-models/v1.0.0 \
+  --model-release-version models/yolov8n/v1.0.0 \
   --model-manifest-asset-name model-manifest.json \
-  --model-hef-asset-name belt-defects-1.0.0.hef \
+  --model-hef-asset-name yolov8n-1.0.0.hef \
   --non-interactive
 ```
 
