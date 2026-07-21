@@ -33,6 +33,7 @@ start_service="true"
 run_preflight="true"
 force_configure="false"
 install_model="prompt"
+cleanup_dir=""
 
 usage() {
   cat <<'USAGE'
@@ -422,7 +423,8 @@ NOTICE
   github_token="$(read_secret "GitHub token for release download" "${github_token_file}")"
   device_token="$(read_secret "OpsRabbit Vision device API token" "${device_token_file}")"
   temporary_dir="$(mktemp -d)"
-  trap 'rm -rf "${temporary_dir}"' EXIT
+  cleanup_dir="${temporary_dir}"
+  trap '[[ -n "${cleanup_dir:-}" ]] && rm -rf "${cleanup_dir}"' EXIT
   deb_path="${temporary_dir}/${asset_name}"
 
   install_system_packages
