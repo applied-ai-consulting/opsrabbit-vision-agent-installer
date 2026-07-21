@@ -61,6 +61,8 @@ curl -fsSL https://raw.githubusercontent.com/applied-ai-consulting/opsrabbit-vis
 The installer prompts for:
 
 - GitHub token for downloading the private `.deb` release asset;
+- latest OpsRabbit Vision Agent release tagged as `agents/opsrabbit-vision/v*`,
+  unless you explicitly pin a release;
 - OpsRabbit backend base URL reachable from the Pi;
 - OpsRabbit Vision device API token;
 - device id, defaulting to `pi5-belt-line-1`;
@@ -81,6 +83,12 @@ trained Conveyor Vision model release such as `models/belt-defects/v1.0.0` with
 defect labels like `cut`, `tear`, `puncture`, `crack`, `abrasion`,
 `edge_damage`, `splice_damage`, `delamination`, and `foreign_object`.
 
+On reruns, the installer defaults to `--configure auto`: if
+`/etc/opsrabbit-vision/vision-agent.toml` and
+`/etc/opsrabbit-vision/device-token.json` already exist, it preserves them and
+only upgrades the package/model/service. Use `--force-configure` or
+`--configure yes` when you intentionally want to rewrite device configuration.
+
 ## Non-interactive install
 
 Prefer token files over command-line token values. Command-line arguments can be
@@ -89,8 +97,6 @@ visible in shell history and process listings.
 ```bash
 sudo bash install.sh \
   --release-repository applied-ai-consulting/oriental \
-  --release-version agents/opsrabbit-vision/v0.1.4 \
-  --asset-name opsrabbit-vision-agent_0.1.4_arm64.deb \
   --device-id pi5-belt-line-1 \
   --base-url https://opsrabbit.example.internal \
   --github-token-file /root/github-release-token.txt \
@@ -101,6 +107,23 @@ sudo bash install.sh \
   --model-release-version models/smoke-test-yolov8n-coco/v1.0.0 \
   --model-manifest-asset-name model-manifest.json \
   --model-hef-asset-name smoke-test-yolov8n-coco-1.0.0.hef \
+  --non-interactive
+```
+
+By default, `--release-version latest` resolves the newest non-draft,
+non-prerelease release whose tag starts with `agents/opsrabbit-vision/v`, then
+derives the Debian asset name from that version, for example
+`opsrabbit-vision-agent_0.1.6_arm64.deb`.
+
+For controlled rollouts or rollback, pin both the release and asset:
+
+```bash
+sudo bash install.sh \
+  --release-version agents/opsrabbit-vision/v0.1.6 \
+  --asset-name opsrabbit-vision-agent_0.1.6_arm64.deb \
+  --base-url https://opsrabbit.example.internal \
+  --github-token-file /root/github-release-token.txt \
+  --device-token-file /root/opsrabbit-vision-device-token.txt \
   --non-interactive
 ```
 
@@ -118,15 +141,13 @@ The installer automatically sets `verify_tls = false` in the generated agent
 configuration when the base URL starts with `http://`.
 
 If you are rerunning the installer after the model was already installed, skip
-the immutable model install step:
+the immutable model install step. Existing agent configuration is preserved
+automatically:
 
 ```bash
 sudo bash install.sh \
-  --base-url http://192.168.1.50:8384 \
   --github-token-file /root/github-release-token.txt \
-  --device-token-file /root/opsrabbit-vision-device-token.txt \
   --skip-model-install \
-  --force-configure \
   --non-interactive
 ```
 

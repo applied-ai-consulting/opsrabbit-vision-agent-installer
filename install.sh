@@ -2,8 +2,9 @@
 set -euo pipefail
 
 DEFAULT_RELEASE_REPOSITORY="applied-ai-consulting/oriental"
-DEFAULT_RELEASE_VERSION="agents/opsrabbit-vision/v0.1.4"
-DEFAULT_ASSET_NAME="opsrabbit-vision-agent_0.1.4_arm64.deb"
+DEFAULT_RELEASE_VERSION="latest"
+DEFAULT_AGENT_RELEASE_TAG_PREFIX="agents/opsrabbit-vision/v"
+DEFAULT_ASSET_NAME=""
 DEFAULT_DEVICE_ID="pi5-belt-line-1"
 DEFAULT_PLUGIN_ID="conveyor-vision"
 DEFAULT_DATA_DIR="/var/lib/opsrabbit-vision"
@@ -34,6 +35,8 @@ run_preflight="true"
 force_configure="false"
 install_model="prompt"
 cleanup_dir=""
+configure_agent_now="true"
+configure_mode="auto"
 
 usage() {
   cat <<'USAGE'
@@ -44,8 +47,8 @@ Usage:
 
 Options:
   --release-repository OWNER/REPO     GitHub repo containing the private release asset.
-  --release-version VERSION|latest    Release tag to download. Defaults to agents/opsrabbit-vision/v0.1.4.
-  --asset-name NAME                   Debian asset name in the release.
+  --release-version VERSION|latest    Release tag to download. Defaults to latest agents/opsrabbit-vision/v* release.
+  --asset-name NAME                   Debian asset name in the release. Defaults to opsrabbit-vision-agent_VERSION_arm64.deb.
   --model-release-repository OWNER/REPO
                                       Optional GitHub repo containing model release assets.
   --model-release-version VERSION|latest
@@ -60,6 +63,9 @@ Options:
   --data-dir PATH                     Agent spool/data directory.
   --github-token-file PATH            File containing GitHub token for private release asset download.
   --device-token-file PATH            File containing OpsRabbit plugin/device API token.
+  --configure yes|no|auto             Write agent config and credentials. Defaults to auto.
+                                      auto preserves existing config/credentials during upgrades.
+  --skip-configure                    Alias for --configure no.
   --install-hailo yes|no|prompt       Install Raspberry Pi hailo-all package.
   --skip-preflight                    Configure/install without running preflight.
   --no-start                          Do not enable/start the systemd service.
@@ -95,6 +101,8 @@ while [[ $# -gt 0 ]]; do
     --data-dir) data_dir="${2:?}"; shift 2 ;;
     --github-token-file) github_token_file="${2:?}"; shift 2 ;;
     --device-token-file) device_token_file="${2:?}"; shift 2 ;;
+    --configure) configure_mode="${2:?}"; shift 2 ;;
+    --skip-configure) configure_mode="no"; shift ;;
     --install-hailo) install_hailo="${2:?}"; shift 2 ;;
     --skip-preflight) run_preflight="false"; shift ;;
     --no-start) start_service="false"; shift ;;
@@ -168,7 +176,9 @@ validate_inputs() {
   arch="$(dpkg --print-architecture 2>/dev/null || true)"
   [[ "${arch}" == "arm64" ]] || fail "This package is arm64-only; detected architecture: ${arch:-unknown}"
   [[ "${release_repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "Invalid --release-repository"
-  [[ "${asset_name}" =~ ^[A-Za-z0-9_.+-]+\.deb$ ]] || fail "Asset name must be a .deb filename"
+  if [[ -n "${asset_name}" ]]; then
+    [[ "${asset_name}" =~ ^[A-Za-z0-9_.+-]+\.deb$ ]] || fail "Asset name must be a .deb filename"
+  fi
   if [[ -n "${model_release_repository}" ]]; then
     [[ "${model_release_repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "Invalid --model-release-repository"
   fi
@@ -176,10 +186,13 @@ validate_inputs() {
   if [[ -n "${model_hef_asset_name}" ]]; then
     [[ "${model_hef_asset_name}" =~ ^[A-Za-z0-9_.+-]+\.hef$ ]] || fail "Model HEF asset name must be a .hef filename"
   fi
-  [[ "${device_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$ ]] || fail "Invalid device id"
   [[ "${plugin_id}" =~ ^[a-z][a-z0-9-]{0,79}$ ]] || fail "Invalid plugin id"
-  [[ "${base_url}" =~ ^https?://[^[:space:]]+$ ]] || fail "Base URL must start with http:// or https://"
+  if [[ "${configure_agent_now}" == "true" ]]; then
+    [[ "${device_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$ ]] || fail "Invalid device id"
+    [[ "${base_url}" =~ ^https?://[^[:space:]]+$ ]] || fail "Base URL must start with http:// or https://"
+  fi
   [[ "${data_dir}" = /* ]] || fail "Data directory must be an absolute path"
+  case "${configure_mode}" in yes|no|auto) ;; *) fail "--configure must be yes, no, or auto" ;; esac
   case "${install_hailo}" in yes|no|prompt) ;; *) fail "--install-hailo must be yes, no, or prompt" ;; esac
   case "${install_model}" in yes|no|prompt) ;; *) fail "--install-model must be yes, no, or prompt" ;; esac
 }
@@ -192,6 +205,66 @@ github_api() {
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "$@"
+}
+
+derive_agent_asset_name() {
+  local version_tag="$1"
+  local semantic_version="${version_tag#${DEFAULT_AGENT_RELEASE_TAG_PREFIX}}"
+  [[ "${semantic_version}" != "${version_tag}" ]] || fail "Cannot derive Debian asset name from non-agent release tag: ${version_tag}"
+  [[ "${semantic_version}" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-.+][A-Za-z0-9_.+-]+)?$ ]] || fail "Cannot derive Debian asset name from invalid semantic version: ${semantic_version}"
+  printf 'opsrabbit-vision-agent_%s_arm64.deb' "${semantic_version}"
+}
+
+resolve_latest_agent_release() {
+  local github_token="$1"
+  local repository="$2"
+  log "Resolving latest OpsRabbit Vision Agent release from ${repository}..." >&2
+  local metadata
+  metadata="$(github_api "${github_token}" "https://api.github.com/repos/${repository}/releases?per_page=100")"
+  METADATA="${metadata}" PREFIX="${DEFAULT_AGENT_RELEASE_TAG_PREFIX}" python3 - <<'PY'
+import json
+import os
+import re
+
+prefix = os.environ["PREFIX"]
+releases = json.loads(os.environ["METADATA"])
+
+def semver_key(tag_name: str):
+    version = tag_name[len(prefix):]
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$", version)
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+candidates = []
+for release in releases:
+    tag_name = release.get("tag_name", "")
+    if release.get("draft") or release.get("prerelease"):
+        continue
+    if not tag_name.startswith(prefix):
+        continue
+    key = semver_key(tag_name)
+    if key is not None:
+        candidates.append((key, tag_name))
+
+if not candidates:
+    raise SystemExit(f"no non-draft, non-prerelease agent releases found with tag prefix {prefix}")
+
+print(max(candidates)[1])
+PY
+}
+
+resolve_agent_release_inputs() {
+  local github_token="$1"
+  if [[ "${release_version}" == "latest" ]]; then
+    release_version="$(resolve_latest_agent_release "${github_token}" "${release_repository}")"
+    log "Latest OpsRabbit Vision Agent release is ${release_version}."
+  fi
+  if [[ -z "${asset_name}" ]]; then
+    asset_name="$(derive_agent_asset_name "${release_version}")"
+    log "Using derived Debian asset name ${asset_name}."
+  fi
+  [[ "${asset_name}" =~ ^[A-Za-z0-9_.+-]+\.deb$ ]] || fail "Asset name must be a .deb filename"
 }
 
 download_release_asset() {
@@ -223,15 +296,22 @@ else:
     raise SystemExit(f"release asset not found: {asset_name}")
 PY
 )"
-  checksum_id="$(METADATA="${metadata}" python3 - "${name}.sha256" <<'PY' || true
+  checksum_id="$(METADATA="${metadata}" python3 - "${name}" <<'PY' || true
 import json, sys
-asset_name = sys.argv[1]
 import os
+asset_name = sys.argv[1]
 release = json.loads(os.environ["METADATA"])
+preferred = f"{asset_name}.sha256"
+checksum_assets = []
 for asset in release.get("assets", []):
-    if asset.get("name") == asset_name:
+    name = asset.get("name")
+    if name == preferred:
         print(asset["id"])
-        break
+        raise SystemExit(0)
+    if name and name.endswith("SHA256SUMS"):
+        checksum_assets.append(asset)
+if checksum_assets:
+    print(checksum_assets[0]["id"])
 PY
 )"
 
@@ -243,15 +323,19 @@ PY
     -o "${output_path}"
 
   if [[ -n "${checksum_id}" ]]; then
-    log "Downloading and verifying ${name}.sha256..."
+    log "Downloading checksum asset and verifying ${name}..."
     curl --fail --silent --show-error --location \
       -H "Authorization: Bearer ${github_token}" \
       -H "Accept: application/octet-stream" \
       "https://api.github.com/repos/${repository}/releases/assets/${checksum_id}" \
       -o "${output_path}.sha256"
-    (cd "$(dirname "${output_path}")" && sha256sum --check "$(basename "${output_path}.sha256")")
+    if grep -F -q "$(basename "${output_path}")" "${output_path}.sha256"; then
+      (cd "$(dirname "${output_path}")" && sha256sum --check --ignore-missing "$(basename "${output_path}.sha256")")
+    else
+      warn "Checksum asset did not contain ${name}; continuing without release checksum verification for this asset."
+    fi
   else
-    warn "No ${name}.sha256 release asset found; continuing without release checksum verification."
+    warn "No checksum release asset found for ${name}; continuing without release checksum verification."
   fi
 }
 
@@ -383,6 +467,28 @@ PY
   fi
 }
 
+resolve_configure_mode() {
+  case "${configure_mode}" in
+    yes)
+      configure_agent_now="true"
+      ;;
+    no)
+      [[ -f "${DEFAULT_CONFIG_PATH}" ]] || fail "--skip-configure requires existing ${DEFAULT_CONFIG_PATH}"
+      [[ -f "${DEFAULT_CREDENTIAL_PATH}" ]] || fail "--skip-configure requires existing ${DEFAULT_CREDENTIAL_PATH}"
+      configure_agent_now="false"
+      ;;
+    auto)
+      if [[ "${force_configure}" == "true" ]]; then
+        configure_agent_now="true"
+      elif [[ -f "${DEFAULT_CONFIG_PATH}" && -f "${DEFAULT_CREDENTIAL_PATH}" ]]; then
+        configure_agent_now="false"
+      else
+        configure_agent_now="true"
+      fi
+      ;;
+  esac
+}
+
 run_agent_preflight() {
   log "Running preflight..."
   runuser -u opsrabbit-vision -- /opt/opsrabbit-vision/venv/bin/opsrabbit-vision preflight \
@@ -398,8 +504,13 @@ enable_service() {
 
 main() {
   require_root
-  prompt_text device_id "Vision device id" "${DEFAULT_DEVICE_ID}"
-  prompt_text base_url "OpsRabbit backend base URL reachable from this Pi"
+  resolve_configure_mode
+  if [[ "${configure_agent_now}" == "true" ]]; then
+    prompt_text device_id "Vision device id" "${DEFAULT_DEVICE_ID}"
+    prompt_text base_url "OpsRabbit backend base URL reachable from this Pi"
+  else
+    log "Existing agent config and credentials found; preserving them for this package upgrade."
+  fi
   validate_inputs
 
   cat <<'NOTICE'
@@ -423,7 +534,10 @@ NOTICE
 
   local github_token device_token temporary_dir deb_path
   github_token="$(read_secret "GitHub token for release download" "${github_token_file}")"
-  device_token="$(read_secret "OpsRabbit Vision device API token" "${device_token_file}")"
+  if [[ "${configure_agent_now}" == "true" ]]; then
+    device_token="$(read_secret "OpsRabbit Vision device API token" "${device_token_file}")"
+  fi
+  resolve_agent_release_inputs "${github_token}"
   temporary_dir="$(mktemp -d)"
   cleanup_dir="${temporary_dir}"
   trap '[[ -n "${cleanup_dir:-}" ]] && rm -rf "${cleanup_dir}"' EXIT
@@ -435,7 +549,11 @@ NOTICE
   log "Installing ${asset_name}..."
   apt-get install -y "${deb_path}"
 
-  configure_agent "${device_token}"
+  if [[ "${configure_agent_now}" == "true" ]]; then
+    configure_agent "${device_token}"
+  else
+    log "Skipping agent configuration rewrite."
+  fi
   install_model_assets "${github_token}" "${temporary_dir}"
 
   if [[ "${run_preflight}" == "true" ]]; then
