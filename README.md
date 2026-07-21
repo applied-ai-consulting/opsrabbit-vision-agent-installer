@@ -89,8 +89,8 @@ visible in shell history and process listings.
 ```bash
 sudo bash install.sh \
   --release-repository applied-ai-consulting/oriental \
-  --release-version agents/opsrabbit-vision/v0.1.2 \
-  --asset-name opsrabbit-vision-agent_0.1.2_arm64.deb \
+  --release-version agents/opsrabbit-vision/v0.1.4 \
+  --asset-name opsrabbit-vision-agent_0.1.4_arm64.deb \
   --device-id pi5-belt-line-1 \
   --base-url https://opsrabbit.example.internal \
   --github-token-file /root/github-release-token.txt \
