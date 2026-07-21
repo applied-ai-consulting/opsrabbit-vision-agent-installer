@@ -61,6 +61,8 @@ curl -fsSL https://raw.githubusercontent.com/applied-ai-consulting/opsrabbit-vis
 The installer prompts for:
 
 - GitHub token for downloading the private `.deb` release asset;
+- latest OpsRabbit Vision Agent release tagged as `agents/opsrabbit-vision/v*`,
+  unless you explicitly pin a release;
 - OpsRabbit backend base URL reachable from the Pi;
 - OpsRabbit Vision device API token;
 - device id, defaulting to `pi5-belt-line-1`;
@@ -89,8 +91,6 @@ visible in shell history and process listings.
 ```bash
 sudo bash install.sh \
   --release-repository applied-ai-consulting/oriental \
-  --release-version agents/opsrabbit-vision/v0.1.4 \
-  --asset-name opsrabbit-vision-agent_0.1.4_arm64.deb \
   --device-id pi5-belt-line-1 \
   --base-url https://opsrabbit.example.internal \
   --github-token-file /root/github-release-token.txt \
@@ -101,6 +101,23 @@ sudo bash install.sh \
   --model-release-version models/smoke-test-yolov8n-coco/v1.0.0 \
   --model-manifest-asset-name model-manifest.json \
   --model-hef-asset-name smoke-test-yolov8n-coco-1.0.0.hef \
+  --non-interactive
+```
+
+By default, `--release-version latest` resolves the newest non-draft,
+non-prerelease release whose tag starts with `agents/opsrabbit-vision/v`, then
+derives the Debian asset name from that version, for example
+`opsrabbit-vision-agent_0.1.6_arm64.deb`.
+
+For controlled rollouts or rollback, pin both the release and asset:
+
+```bash
+sudo bash install.sh \
+  --release-version agents/opsrabbit-vision/v0.1.6 \
+  --asset-name opsrabbit-vision-agent_0.1.6_arm64.deb \
+  --base-url https://opsrabbit.example.internal \
+  --github-token-file /root/github-release-token.txt \
+  --device-token-file /root/opsrabbit-vision-device-token.txt \
   --non-interactive
 ```
 
