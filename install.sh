@@ -10,9 +10,9 @@ DEFAULT_DATA_DIR="/var/lib/opsrabbit-vision"
 DEFAULT_CONFIG_PATH="/etc/opsrabbit-vision/vision-agent.toml"
 DEFAULT_CREDENTIAL_PATH="/etc/opsrabbit-vision/device-token.json"
 DEFAULT_MODEL_RELEASE_REPOSITORY="applied-ai-consulting/oriental"
-DEFAULT_MODEL_RELEASE_VERSION="models/belt-defects/v1.0.0"
+DEFAULT_MODEL_RELEASE_VERSION="models/smoke-test-yolov8n-coco/v1.0.0"
 DEFAULT_MODEL_MANIFEST_ASSET_NAME="model-manifest.json"
-DEFAULT_MODEL_HEF_ASSET_NAME="belt-defects-1.0.0.hef"
+DEFAULT_MODEL_HEF_ASSET_NAME="smoke-test-yolov8n-coco-1.0.0.hef"
 
 release_repository="${OPSRABBIT_VISION_RELEASE_REPOSITORY:-${DEFAULT_RELEASE_REPOSITORY}}"
 release_version="${OPSRABBIT_VISION_RELEASE_VERSION:-${DEFAULT_RELEASE_VERSION}}"
@@ -48,9 +48,9 @@ Options:
   --model-release-repository OWNER/REPO
                                       Optional GitHub repo containing model release assets.
   --model-release-version VERSION|latest
-                                      Model release tag to download. Defaults to models/belt-defects/v1.0.0.
+                                      Model release tag to download. Defaults to models/smoke-test-yolov8n-coco/v1.0.0.
   --model-manifest-asset-name NAME    Model manifest asset name. Defaults to model-manifest.json.
-  --model-hef-asset-name NAME         Hailo HEF model asset name to install. Defaults to belt-defects-1.0.0.hef.
+  --model-hef-asset-name NAME         Hailo HEF model asset name to install. Defaults to smoke-test-yolov8n-coco-1.0.0.hef.
   --install-model yes|no|prompt       Download/install model after agent configuration.
   --device-id ID                      Registered Conveyor Vision device id.
   --base-url URL                      OpsRabbit backend base URL reachable from the Pi.

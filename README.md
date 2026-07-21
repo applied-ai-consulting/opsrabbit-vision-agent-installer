@@ -70,13 +70,16 @@ The installer prompts for:
 If you choose model installation, provide:
 
 - model release repository, default `applied-ai-consulting/oriental`;
-- model release version/tag, default `models/belt-defects/v1.0.0`;
+- model release version/tag, default `models/smoke-test-yolov8n-coco/v1.0.0`;
 - model manifest asset name, default `model-manifest.json`;
-- model HEF asset name, default `belt-defects-1.0.0.hef`.
+- model HEF asset name, default `smoke-test-yolov8n-coco-1.0.0.hef`.
 
-The default model release points to the Conveyor Vision belt-defect taxonomy:
-`cut`, `tear`, `edge_damage`, and `splice_damage`. Publish that model release
-from the trained Conveyor Vision model before installing it on the Pi.
+The default model release points to Hailo's Hailo-8L `yolov8n` COCO smoke-test
+model. Use it to validate the Pi, Hailo runtime, installer, and upload path. It
+is not trained for conveyor belt defects. For production, publish a separate
+trained Conveyor Vision model release such as `models/belt-defects/v1.0.0` with
+defect labels like `cut`, `tear`, `puncture`, `crack`, `abrasion`,
+`edge_damage`, `splice_damage`, `delamination`, and `foreign_object`.
 
 ## Non-interactive install
 
@@ -95,9 +98,9 @@ sudo bash install.sh \
   --install-hailo yes \
   --install-model yes \
   --model-release-repository applied-ai-consulting/oriental \
-  --model-release-version models/belt-defects/v1.0.0 \
+  --model-release-version models/smoke-test-yolov8n-coco/v1.0.0 \
   --model-manifest-asset-name model-manifest.json \
-  --model-hef-asset-name belt-defects-1.0.0.hef \
+  --model-hef-asset-name smoke-test-yolov8n-coco-1.0.0.hef \
   --non-interactive
 ```
 
@@ -159,7 +162,7 @@ calling the packaged registry installer:
 sudo /opt/opsrabbit-vision/venv/bin/opsrabbit-vision model-install \
   --config /etc/opsrabbit-vision/vision-agent.toml \
   --manifest /secure-staging/model-manifest.json \
-  --artifact /secure-staging/belt-defects-1.0.0.hef
+  --artifact /secure-staging/smoke-test-yolov8n-coco-1.0.0.hef
 ```
 
 The model manifest must match the HEF SHA-256, target `hailo8l`, input width,
