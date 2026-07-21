@@ -2,8 +2,8 @@
 set -euo pipefail
 
 DEFAULT_RELEASE_REPOSITORY="applied-ai-consulting/oriental"
-DEFAULT_RELEASE_VERSION="agents/opsrabbit-vision/v0.1.1"
-DEFAULT_ASSET_NAME="opsrabbit-vision-agent_0.1.1_arm64.deb"
+DEFAULT_RELEASE_VERSION="agents/opsrabbit-vision/v0.1.2"
+DEFAULT_ASSET_NAME="opsrabbit-vision-agent_0.1.2_arm64.deb"
 DEFAULT_DEVICE_ID="pi5-belt-line-1"
 DEFAULT_PLUGIN_ID="conveyor-vision"
 DEFAULT_DATA_DIR="/var/lib/opsrabbit-vision"
@@ -44,7 +44,7 @@ Usage:
 
 Options:
   --release-repository OWNER/REPO     GitHub repo containing the private release asset.
-  --release-version VERSION|latest    Release tag to download. Defaults to agents/opsrabbit-vision/v0.1.1.
+  --release-version VERSION|latest    Release tag to download. Defaults to agents/opsrabbit-vision/v0.1.2.
   --asset-name NAME                   Debian asset name in the release.
   --model-release-repository OWNER/REPO
                                       Optional GitHub repo containing model release assets.
@@ -53,6 +53,7 @@ Options:
   --model-manifest-asset-name NAME    Model manifest asset name. Defaults to model-manifest.json.
   --model-hef-asset-name NAME         Hailo HEF model asset name to install. Defaults to smoke-test-yolov8n-coco-1.0.0.hef.
   --install-model yes|no|prompt       Download/install model after agent configuration.
+  --skip-model-install                Alias for --install-model no, useful when rerunning after a model was already installed.
   --device-id ID                      Registered Conveyor Vision device id.
   --base-url URL                      OpsRabbit backend base URL reachable from the Pi.
   --plugin-id ID                      OpsRabbit plugin id. Defaults to conveyor-vision.
@@ -87,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --model-manifest-asset-name) model_manifest_asset_name="${2:?}"; shift 2 ;;
     --model-hef-asset-name) model_hef_asset_name="${2:?}"; shift 2 ;;
     --install-model) install_model="${2:?}"; shift 2 ;;
+    --skip-model-install) install_model="no"; shift ;;
     --device-id) device_id="${2:?}"; shift 2 ;;
     --base-url) base_url="${2:?}"; shift 2 ;;
     --plugin-id) plugin_id="${2:?}"; shift 2 ;;
