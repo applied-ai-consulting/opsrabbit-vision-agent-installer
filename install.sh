@@ -9,10 +9,15 @@ DEFAULT_PLUGIN_ID="conveyor-vision"
 DEFAULT_DATA_DIR="/var/lib/opsrabbit-vision"
 DEFAULT_CONFIG_PATH="/etc/opsrabbit-vision/vision-agent.toml"
 DEFAULT_CREDENTIAL_PATH="/etc/opsrabbit-vision/device-token.json"
+DEFAULT_MODEL_MANIFEST_ASSET_NAME="model-manifest.json"
 
 release_repository="${OPSRABBIT_VISION_RELEASE_REPOSITORY:-${DEFAULT_RELEASE_REPOSITORY}}"
 release_version="${OPSRABBIT_VISION_RELEASE_VERSION:-${DEFAULT_RELEASE_VERSION}}"
 asset_name="${OPSRABBIT_VISION_ASSET_NAME:-${DEFAULT_ASSET_NAME}}"
+model_release_repository="${OPSRABBIT_VISION_MODEL_RELEASE_REPOSITORY:-}"
+model_release_version="${OPSRABBIT_VISION_MODEL_RELEASE_VERSION:-latest}"
+model_manifest_asset_name="${OPSRABBIT_VISION_MODEL_MANIFEST_ASSET_NAME:-${DEFAULT_MODEL_MANIFEST_ASSET_NAME}}"
+model_hef_asset_name="${OPSRABBIT_VISION_MODEL_HEF_ASSET_NAME:-}"
 device_id="${OPSRABBIT_VISION_DEVICE_ID:-}"
 base_url="${OPSRABBIT_VISION_BASE_URL:-}"
 plugin_id="${OPSRABBIT_VISION_PLUGIN_ID:-${DEFAULT_PLUGIN_ID}}"
@@ -24,6 +29,7 @@ install_hailo="prompt"
 start_service="true"
 run_preflight="true"
 force_configure="false"
+install_model="prompt"
 
 usage() {
   cat <<'USAGE'
@@ -36,6 +42,13 @@ Options:
   --release-repository OWNER/REPO     GitHub repo containing the private release asset.
   --release-version VERSION|latest    Release tag to download. Defaults to latest.
   --asset-name NAME                   Debian asset name in the release.
+  --model-release-repository OWNER/REPO
+                                      Optional GitHub repo containing model release assets.
+  --model-release-version VERSION|latest
+                                      Model release tag to download. Defaults to latest.
+  --model-manifest-asset-name NAME    Model manifest asset name. Defaults to model-manifest.json.
+  --model-hef-asset-name NAME         Hailo HEF model asset name to install.
+  --install-model yes|no|prompt       Download/install model after agent configuration.
   --device-id ID                      Registered Conveyor Vision device id.
   --base-url URL                      OpsRabbit backend base URL reachable from the Pi.
   --plugin-id ID                      OpsRabbit plugin id. Defaults to conveyor-vision.
@@ -53,9 +66,10 @@ Environment variables mirror the long option names with OPSRABBIT_VISION_*
 prefixes, for example OPSRABBIT_VISION_BASE_URL.
 
 Security model:
-  AWS/S3 credentials are not installed on the Pi. Configure S3/object storage
-  in OpsRabbit/Conveyor Vision. The agent receives short-lived upload
-  authorizations from OpsRabbit and stores only its device API token locally.
+  S3 credentials are configured in OpsRabbit/Conveyor Vision, not on the Pi.
+  Model releases can be private; the GitHub token is used only for downloads.
+  The agent receives short-lived upload authorizations from OpsRabbit and
+  stores only its device API token locally.
 USAGE
 }
 
@@ -64,6 +78,11 @@ while [[ $# -gt 0 ]]; do
     --release-repository) release_repository="${2:?}"; shift 2 ;;
     --release-version) release_version="${2:?}"; shift 2 ;;
     --asset-name) asset_name="${2:?}"; shift 2 ;;
+    --model-release-repository) model_release_repository="${2:?}"; shift 2 ;;
+    --model-release-version) model_release_version="${2:?}"; shift 2 ;;
+    --model-manifest-asset-name) model_manifest_asset_name="${2:?}"; shift 2 ;;
+    --model-hef-asset-name) model_hef_asset_name="${2:?}"; shift 2 ;;
+    --install-model) install_model="${2:?}"; shift 2 ;;
     --device-id) device_id="${2:?}"; shift 2 ;;
     --base-url) base_url="${2:?}"; shift 2 ;;
     --plugin-id) plugin_id="${2:?}"; shift 2 ;;
@@ -144,11 +163,19 @@ validate_inputs() {
   [[ "${arch}" == "arm64" ]] || fail "This package is arm64-only; detected architecture: ${arch:-unknown}"
   [[ "${release_repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "Invalid --release-repository"
   [[ "${asset_name}" =~ ^[A-Za-z0-9_.+-]+\.deb$ ]] || fail "Asset name must be a .deb filename"
+  if [[ -n "${model_release_repository}" ]]; then
+    [[ "${model_release_repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "Invalid --model-release-repository"
+  fi
+  [[ "${model_manifest_asset_name}" =~ ^[A-Za-z0-9_.+-]+\.json$ ]] || fail "Model manifest asset name must be a .json filename"
+  if [[ -n "${model_hef_asset_name}" ]]; then
+    [[ "${model_hef_asset_name}" =~ ^[A-Za-z0-9_.+-]+\.hef$ ]] || fail "Model HEF asset name must be a .hef filename"
+  fi
   [[ "${device_id}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$ ]] || fail "Invalid device id"
   [[ "${plugin_id}" =~ ^[a-z][a-z0-9-]{0,79}$ ]] || fail "Invalid plugin id"
   [[ "${base_url}" =~ ^https?://[^[:space:]]+$ ]] || fail "Base URL must start with http:// or https://"
   [[ "${data_dir}" = /* ]] || fail "Data directory must be an absolute path"
   case "${install_hailo}" in yes|no|prompt) ;; *) fail "--install-hailo must be yes, no, or prompt" ;; esac
+  case "${install_model}" in yes|no|prompt) ;; *) fail "--install-model must be yes, no, or prompt" ;; esac
 }
 
 github_api() {
@@ -164,17 +191,20 @@ github_api() {
 download_release_asset() {
   local github_token="$1"
   local output_path="$2"
+  local repository="${3:-${release_repository}}"
+  local version="${4:-${release_version}}"
+  local name="${5:-${asset_name}}"
   local metadata_url
-  if [[ "${release_version}" == "latest" ]]; then
-    metadata_url="https://api.github.com/repos/${release_repository}/releases/latest"
+  if [[ "${version}" == "latest" ]]; then
+    metadata_url="https://api.github.com/repos/${repository}/releases/latest"
   else
-    metadata_url="https://api.github.com/repos/${release_repository}/releases/tags/${release_version}"
+    metadata_url="https://api.github.com/repos/${repository}/releases/tags/${version}"
   fi
 
-  log "Resolving ${asset_name} from ${release_repository} release ${release_version}..."
+  log "Resolving ${name} from ${repository} release ${version}..."
   local metadata asset_id checksum_id
   metadata="$(github_api "${github_token}" "${metadata_url}")"
-  asset_id="$(METADATA="${metadata}" python3 - "${asset_name}" <<'PY'
+  asset_id="$(METADATA="${metadata}" python3 - "${name}" <<'PY'
 import json, sys
 asset_name = sys.argv[1]
 import os
@@ -187,7 +217,7 @@ else:
     raise SystemExit(f"release asset not found: {asset_name}")
 PY
 )"
-  checksum_id="$(METADATA="${metadata}" python3 - "${asset_name}.sha256" <<'PY' || true
+  checksum_id="$(METADATA="${metadata}" python3 - "${name}.sha256" <<'PY' || true
 import json, sys
 asset_name = sys.argv[1]
 import os
@@ -199,24 +229,71 @@ for asset in release.get("assets", []):
 PY
 )"
 
-  log "Downloading ${asset_name}..."
+  log "Downloading ${name}..."
   curl --fail --silent --show-error --location \
     -H "Authorization: Bearer ${github_token}" \
     -H "Accept: application/octet-stream" \
-    "https://api.github.com/repos/${release_repository}/releases/assets/${asset_id}" \
+    "https://api.github.com/repos/${repository}/releases/assets/${asset_id}" \
     -o "${output_path}"
 
   if [[ -n "${checksum_id}" ]]; then
-    log "Downloading and verifying ${asset_name}.sha256..."
+    log "Downloading and verifying ${name}.sha256..."
     curl --fail --silent --show-error --location \
       -H "Authorization: Bearer ${github_token}" \
       -H "Accept: application/octet-stream" \
-      "https://api.github.com/repos/${release_repository}/releases/assets/${checksum_id}" \
+      "https://api.github.com/repos/${repository}/releases/assets/${checksum_id}" \
       -o "${output_path}.sha256"
     (cd "$(dirname "${output_path}")" && sha256sum --check "$(basename "${output_path}.sha256")")
   else
-    warn "No ${asset_name}.sha256 release asset found; continuing without release checksum verification."
+    warn "No ${name}.sha256 release asset found; continuing without release checksum verification."
   fi
+}
+
+install_model_assets() {
+  local github_token="$1"
+  local temporary_dir="$2"
+  local should_install="${install_model}"
+  if [[ "${should_install}" == "prompt" ]]; then
+    if [[ "${non_interactive}" == "true" ]]; then
+      should_install="no"
+    else
+      local answer
+      read -r -p "Download and install a Hailo model now? [y/N]: " answer </dev/tty
+      case "${answer}" in y|Y|yes|YES) should_install="yes" ;; *) should_install="no" ;; esac
+    fi
+  fi
+  if [[ "${should_install}" != "yes" ]]; then
+    warn "Model install skipped. Run opsrabbit-vision model-install before starting a real inspection."
+    return
+  fi
+  prompt_text model_release_repository "Model release repository"
+  prompt_text model_hef_asset_name "Model HEF asset name, for example belt-defects-1.0.0.hef"
+  validate_inputs
+
+  local model_dir manifest_path hef_path
+  model_dir="${temporary_dir}/model"
+  mkdir -p "${model_dir}"
+  manifest_path="${model_dir}/${model_manifest_asset_name}"
+  hef_path="${model_dir}/${model_hef_asset_name}"
+
+  download_release_asset \
+    "${github_token}" \
+    "${manifest_path}" \
+    "${model_release_repository}" \
+    "${model_release_version}" \
+    "${model_manifest_asset_name}"
+  download_release_asset \
+    "${github_token}" \
+    "${hef_path}" \
+    "${model_release_repository}" \
+    "${model_release_version}" \
+    "${model_hef_asset_name}"
+
+  log "Installing immutable Hailo model into the agent registry..."
+  /opt/opsrabbit-vision/venv/bin/opsrabbit-vision model-install \
+    --config "${DEFAULT_CONFIG_PATH}" \
+    --manifest "${manifest_path}" \
+    --artifact "${hef_path}"
 }
 
 install_system_packages() {
@@ -350,6 +427,7 @@ NOTICE
   apt-get install -y "${deb_path}"
 
   configure_agent "${device_token}"
+  install_model_assets "${github_token}" "${temporary_dir}"
 
   if [[ "${run_preflight}" == "true" ]]; then
     run_agent_preflight

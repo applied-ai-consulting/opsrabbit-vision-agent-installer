@@ -20,7 +20,10 @@ to the configured object store, and keeps local evidence until remote
 verification succeeds.
 
 The installer asks whether object storage is already configured in OpsRabbit so
-operators do not forget that step, but it does not collect AWS credentials.
+operators do not forget that step, but it does not collect S3 credentials.
+Hailo model releases may be private; the same GitHub token can be used to
+download the approved HEF model and its manifest, but model files are staged
+temporarily and installed through the agent's digest-verifying model registry.
 
 ## Prerequisites
 
@@ -30,6 +33,10 @@ In OpsRabbit:
 2. Configure the plugin's object-store/S3 destination.
 3. Register and approve the Vision device, for example `pi5-belt-line-1`.
 4. Create a scoped plugin/device API token for that device.
+5. Publish or stage an approved Hailo model release containing:
+   - `model-manifest.json`
+   - the matching `.hef` file
+   - optional `.sha256` checksum assets for both files
 
 In GitHub:
 
@@ -57,7 +64,15 @@ The installer prompts for:
 - OpsRabbit backend base URL reachable from the Pi;
 - OpsRabbit Vision device API token;
 - device id, defaulting to `pi5-belt-line-1`;
-- optional Hailo package installation.
+- optional Hailo package installation;
+- optional Hailo model download/install.
+
+If you choose model installation, provide:
+
+- model release repository, for example `applied-ai-consulting/oriental`;
+- model release version/tag, or `latest`;
+- model manifest asset name, default `model-manifest.json`;
+- model HEF asset name, for example `belt-defects-1.0.0.hef`.
 
 ## Non-interactive install
 
@@ -74,6 +89,11 @@ sudo bash install.sh \
   --github-token-file /root/github-release-token.txt \
   --device-token-file /root/opsrabbit-vision-device-token.txt \
   --install-hailo yes \
+  --install-model yes \
+  --model-release-repository applied-ai-consulting/oriental \
+  --model-release-version agents/opsrabbit-vision-models/v1.0.0 \
+  --model-manifest-asset-name model-manifest.json \
+  --model-hef-asset-name belt-defects-1.0.0.hef \
   --non-interactive
 ```
 
@@ -124,6 +144,25 @@ sudo runuser -u opsrabbit-vision -- \
   /opt/opsrabbit-vision/venv/bin/opsrabbit-vision preflight \
   --config /etc/opsrabbit-vision/vision-agent.toml
 ```
+
+## Model-only install or upgrade
+
+If the agent is already installed, install or upgrade the model without
+reinstalling the Debian package by downloading the two release assets and
+calling the packaged registry installer:
+
+```bash
+sudo /opt/opsrabbit-vision/venv/bin/opsrabbit-vision model-install \
+  --config /etc/opsrabbit-vision/vision-agent.toml \
+  --manifest /secure-staging/model-manifest.json \
+  --artifact /secure-staging/belt-defects-1.0.0.hef
+```
+
+The model manifest must match the HEF SHA-256, target `hailo8l`, input width,
+input height, tile overlap, semantic model version, and ordered class labels.
+The service may run without a model while idle, but any `start_capture` command
+for a missing model is rejected. For first commissioning, use `--no-start` until
+model, camera profile, and calibration files are installed.
 
 If an inspection was already started in OpsRabbit, the running agent should pick
 up the pending `start_capture` command, acknowledge it, and emit
